@@ -5,7 +5,7 @@
  * Toutes les actions sont typées strictement (zéro `any`) et revalident les pages.
  */
 import { revalidatePath } from "next/cache";
-import type { OfferStatus, WorkMode } from "@prisma/client";
+import { OfferStatus, type WorkMode } from "@prisma/client";
 import { db } from "@/lib/db";
 import { attestationContent } from "@/lib/entreprise-templates";
 
@@ -80,7 +80,7 @@ export async function createOffer(input: OfferInput): Promise<ActionResult> {
         description: input.description.trim(),
         missions: input.missions.join("\n"),
         skills: input.skills,
-        ...(input.status !== undefined ? { status: input.status } : {}),
+        status: input.status ?? OfferStatus.PUBLISHED,
         aiGenerated: input.aiGenerated ?? false,
       },
     });
@@ -103,7 +103,7 @@ export async function updateOfferStatus(offerId: string, status: OfferStatus): P
 
 export async function deleteOffer(offerId: string): Promise<ActionResult> {
   try {
-    const used = await db.application.count({ where: { offerId } });
+    const used = await db.candidature.count({ where: { offerId } });
     if (used > 0) {
       await db.offer.update({ where: { id: offerId }, data: { status: "BROUILLON" } });
       revalidateAll();

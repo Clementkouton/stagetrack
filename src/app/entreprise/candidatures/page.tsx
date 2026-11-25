@@ -20,7 +20,7 @@ const STATUS_KEYS = new Set<CandidatureStatus>([
 
 export default async function EntrepriseCandidaturesPage() {
   const [candidatures, offers, tutors] = await Promise.all([
-    (db as any).candidature.findMany({
+    db.candidature.findMany({
       orderBy: { createdAt: "desc" },
       include: { offer: { select: { title: true } } },
     }),
