@@ -80,7 +80,7 @@ export async function createOffer(input: OfferInput): Promise<ActionResult> {
         description: input.description.trim(),
         missions: input.missions.join("\n"),
         skills: input.skills,
-        status: input.status ?? "PUBLIEE",
+        ...(input.status !== undefined ? { status: input.status } : {}),
         aiGenerated: input.aiGenerated ?? false,
       },
     });
@@ -91,7 +91,7 @@ export async function createOffer(input: OfferInput): Promise<ActionResult> {
   }
 }
 
-export async function updateOfferStatus(offerId: string, status: "PUBLIEE" | "BROUILLON" | "POURVUE"): Promise<ActionResult> {
+export async function updateOfferStatus(offerId: string, status: OfferStatus): Promise<ActionResult> {
   try {
     await db.offer.update({ where: { id: offerId }, data: { status } });
     revalidateAll();
@@ -103,7 +103,7 @@ export async function updateOfferStatus(offerId: string, status: "PUBLIEE" | "BR
 
 export async function deleteOffer(offerId: string): Promise<ActionResult> {
   try {
-    const used = await db.candidature.count({ where: { offerId } });
+    const used = await db.application.count({ where: { offerId } });
     if (used > 0) {
       await db.offer.update({ where: { id: offerId }, data: { status: "BROUILLON" } });
       revalidateAll();
