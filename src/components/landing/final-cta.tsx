@@ -8,6 +8,7 @@ import {
   IconSchool,
   IconSparkles,
 } from "@tabler/icons-react";
+import Link from "next/link";
 import { Reveal } from "./shared";
 
 const perks = ["Sans frais cachés", "Sans carte bancaire", "Sans engagement"];
@@ -84,22 +85,22 @@ export function FinalCta() {
             </div>
 
             <div className="mt-9 flex flex-col items-center justify-center gap-3.5 sm:flex-row">
-              <a
-                href="#"
+              <Link
+                href="/auth?role=etudiant&mode=inscription"
                 className="group inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gold px-7 py-3.5 text-sm font-bold text-white shadow-lg shadow-black/20 transition-all duration-200 hover:bg-gold-dark sm:w-auto"
               >
                 <IconSchool size={17} />
                 Je suis étudiant
                 <IconArrowRight size={16} className="transition-transform group-hover:translate-x-0.5" />
-              </a>
-              <a
-                href="#"
+              </Link>
+              <Link
+                href="/auth?role=entreprise&mode=inscription"
                 className="group inline-flex w-full items-center justify-center gap-2 rounded-xl border-2 border-white/25 bg-white/5 px-7 py-3.5 text-sm font-bold text-white transition-all duration-200 hover:border-white/60 hover:bg-white/10 sm:w-auto"
               >
                 <IconBriefcase size={17} />
                 Je suis une entreprise
                 <IconArrowRight size={16} className="transition-transform group-hover:translate-x-0.5" />
-              </a>
+              </Link>
             </div>
           </div>
         </div>

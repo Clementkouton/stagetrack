@@ -1,32 +1,301 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL") // Recommandé par Neon pour les migrations Prisma
 }
+
+// ==========================================
+// ENUMS
+// ==========================================
+
+enum Role {
+  STUDENT
+  COMPANY
+  UNIVERSITY
+  ADMIN
+}
+
+enum OfferStatus {
+  DRAFT
+  PUBLISHED
+  PAUSED
+  CLOSED
+}
+
+enum WorkMode {
+  ONSITE
+  HYBRID
+  REMOTE
+}
+
+enum ApplicationStatus {
+  NEW
+  SHORTLISTED
+  INTERVIEW
+  OFFER_SENT
+  ACCEPTED
+  REJECTED
+}
+
+enum InternshipStatus {
+  UPCOMING
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  IN_REVIEW
+  DONE
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  JUSTIFIED
+  PENDING
+}
+
+enum DocumentType {
+  CONVENTION
+  ID_CARD
+  INSURANCE
+  FINAL_REPORT
+  ATTESTATION
+  OTHER
+}
+
+enum SignatureStatus {
+  PENDING
+  SIGNED_STUDENT
+  SIGNED_COMPANY
+  SIGNED_ALL
+}
+
+// ==========================================
+// UTILISATEURS & ENTITÉS PRINCIPALES
+// ==========================================
 
 model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  name      String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  fullName     String
+  role         Role
+  avatarUrl    String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  studentProfile    StudentProfile?
+  companyMember     CompanyMember?
+  universityProfile UniversityProfile?
 }
 
-model Post {
+model UniversityProfile {
   id        String   @id @default(cuid())
-  title     String
-  content   String?
-  published Boolean  @default(false)
-  authorId  String
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String   // Ex: Institut de Formation et de Recherche en Informatique (IFRI)
+  acronym   String   @unique // Ex: IFRI, ENEAM, EPAC
+  city      String?
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+
+  students    StudentProfile[]
+  internships Internship[]
+}
+
+model StudentProfile {
+  id           String             @id @default(cuid())
+  userId       String             @unique
+  user         User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  matricule    String             @unique // Identifiant unique étudiant pour la connexion
+  universityId String?
+  university   UniversityProfile? @relation(fields: [universityId], references: [id])
+  schoolName   String?            // Détecté via le matricule si l'université n'est pas encore inscrite
+  fieldOfStudy String?
+  level        String?            // Ex: Licence 3, Master 1, Master 2
+  phone        String?
+  cvUrl        String?
+  skills       String[]
+  createdAt    DateTime           @default(now())
+
+  applications Application[]
+  internships  Internship[]
+}
+
+model Company {
+  id          String   @id @default(cuid())
+  name        String
+  sector      String
+  city        String
+  description String?  @db.Text
+  website     String?
+  logoUrl     String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  members     CompanyMember[]
+  offers      Offer[]
+  internships Internship[]
+}
+
+model CompanyMember {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  companyId String
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  jobTitle  String?  // Ex: Responsable RH, Lead Développeur / Tuteur
+  isAdmin   Boolean  @default(true) // true = RH Admin, false = Tuteur de stage
+  createdAt DateTime @default(now())
+
+  supervisedInternships Internship[] @relation("TutorInternships")
+}
+
+// ==========================================
+// OFFRES DE STAGE & CANDIDATURES (ATS)
+// ==========================================
+
+model Offer {
+  id           String      @id @default(cuid())
+  companyId    String
+  company      Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  title        String
+  sector       String
+  city         String
+  workMode     WorkMode    @default(ONSITE)
+  duration     String      // Ex: "3 mois", "6 mois"
+  stipend      String?     // Ex: "50 000 FCFA / mois" ou "Non rémunéré"
+  description  String      @db.Text
+  missions     String      @db.Text
+  skills       String[]
+  spots        Int         @default(1)
+  status       OfferStatus @default(PUBLISHED)
+  viewsCount   Int         @default(0)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  applications Application[]
+}
+
+model Application {
+  id            String            @id @default(cuid())
+  offerId       String
+  offer         Offer             @relation(fields: [offerId], references: [id], onDelete: Cascade)
+  studentId     String
+  student       StudentProfile    @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  coverLetter   String?           @db.Text
+  cvUrl         String?
+  status        ApplicationStatus @default(NEW)
+  matchScore    Int?              @default(85)
+  interviewDate DateTime?
+  interviewLink String?
+  notes         String?           @db.Text
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  internship    Internship?
+
+  @@unique([offerId, studentId])
+}
+
+// ==========================================
+// GESTION DES STAGIAIRES EN ENTREPRISE
+// ==========================================
+
+model Internship {
+  id             String             @id @default(cuid())
+  companyId      String
+  company        Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  studentId      String
+  student        StudentProfile     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  applicationId  String?            @unique
+  application    Application?       @relation(fields: [applicationId], references: [id])
+  tutorId        String?
+  tutor          CompanyMember?     @relation("TutorInternships", fields: [tutorId], references: [id])
+  universityId   String?
+  university     UniversityProfile? @relation(fields: [universityId], references: [id])
+  title          String
+  department     String?
+  startDate      DateTime
+  endDate        DateTime
+  status         InternshipStatus   @default(ACTIVE)
+  talentPoolTag  Boolean            @default(false) // Vivier "À recruter en CDI/CDD"
+  onboardingDone Boolean            @default(false)
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  tasks       InternshipTask[]
+  attendances Attendance[]
+  weeklyLogs  WeeklyLog[]
+  documents   Document[]
+  evaluation  Evaluation?
+}
+
+model InternshipTask {
+  id           String     @id @default(cuid())
+  internshipId String
+  internship   Internship @relation(fields: [internshipId], references: [id], onDelete: Cascade)
+  title        String
+  description  String?    @db.Text
+  dueDate      DateTime?
+  status       TaskStatus @default(TODO)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+}
+
+model Attendance {
+  id           String           @id @default(cuid())
+  internshipId String
+  internship   Internship       @relation(fields: [internshipId], references: [id], onDelete: Cascade)
+  date         DateTime
+  status       AttendanceStatus @default(PRESENT)
+  hoursLogged  Float            @default(8)
+  note         String?
+  validated    Boolean          @default(false)
+  createdAt    DateTime         @default(now())
+
+  @@unique([internshipId, date])
+}
+
+model WeeklyLog {
+  id            String     @id @default(cuid())
+  internshipId  String
+  internship    Internship @relation(fields: [internshipId], references: [id], onDelete: Cascade)
+  weekNumber    Int
+  summary       String     @db.Text
+  tutorFeedback String?    @db.Text
+  validated     Boolean    @default(false)
+  createdAt     DateTime   @default(now())
+}
+
+model Document {
+  id              String          @id @default(cuid())
+  internshipId    String
+  internship      Internship      @relation(fields: [internshipId], references: [id], onDelete: Cascade)
+  name            String
+  type            DocumentType
+  fileUrl         String?
+  signatureStatus SignatureStatus @default(PENDING)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+}
+
+model Evaluation {
+  id                  String     @id @default(cuid())
+  internshipId        String     @unique
+  internship          Internship @relation(fields: [internshipId], references: [id], onDelete: Cascade)
+  technicalScore      Int        // Note sur 5
+  punctualityScore    Int        // Note sur 5
+  autonomyScore       Int        // Note sur 5
+  teamworkScore       Int        // Note sur 5
+  overallComment      String     @db.Text
+  recommendForHire    Boolean    @default(true)
+  createdAt           DateTime   @default(now())
 }
