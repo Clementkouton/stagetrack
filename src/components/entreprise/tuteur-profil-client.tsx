@@ -446,7 +446,6 @@ export function TuteurProfilClient({ payload }: { payload: TuteurProfilePayload 
               </div>
             </CardContent>
           </Card>
-
           <Card className="border-slate-200/80 rounded-xl bg-white">
             <CardContent className="space-y-4 p-5">
               <div className="flex items-center gap-2">
@@ -470,36 +469,73 @@ export function TuteurProfilClient({ payload }: { payload: TuteurProfilePayload 
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="p-phone" className="text-xs font-semibold text-ink">Téléphone</Label>
-                <Input id="p-phone" value={phone} onChange={(e) => setPhone(e.target.value)} className="h-10 rounded-xl text-sm" />
+                <Input
+                  id="p-phone"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  className="h-10 rounded-xl text-sm"
+                />
               </div>
 
               <div className="border-t border-slate-100 pt-3">
                 <p className="text-xs font-bold uppercase tracking-wide text-slate-400">Sécurité</p>
                 <div className="mt-2 grid grid-cols-1 gap-3">
-                  <Input
-                    type="password"
-                    value={currentPassword}
-                    onChange={(e) => setCurrentPassword(e.target.value)}
-                    placeholder="Mot de passe actuel"
-                    autoComplete="current-password"
-                    className="h-9 rounded-xl text-sm"
-                  />
-                  <Input
-                    type="password"
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    placeholder="Nouveau mot de passe (8 car. min., lettres + chiffres)"
-                    autoComplete="new-password"
-                    className="h-9 rounded-xl text-sm"
-                  />
-                  <Input
-                    type="password"
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    placeholder="Confirmer le nouveau mot de passe"
-                    autoComplete="new-password"
-                    className="h-9 rounded-xl text-sm"
-                  />
+                  <div className="relative">
+                    <Input
+                      type={showCurrentPassword ? "text" : "password"}
+                      value={currentPassword}
+                      onChange={(e) => setCurrentPassword(e.target.value)}
+                      placeholder="Mot de passe actuel"
+                      autoComplete="current-password"
+                      className="h-9 rounded-xl pr-10 text-sm"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowCurrentPassword((prev) => !prev)}
+                      aria-label={showCurrentPassword ? "Masquer le mot de passe" : "Afficher le mot de passe"}
+                      className="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-400 transition-colors hover:text-[#0B393C]"
+                    >
+                      {showCurrentPassword ? <IconEyeOff size={15} /> : <IconEye size={15} />}
+                    </button>
+                  </div>
+
+                  <div className="relative">
+                    <Input
+                      type={showNewPassword ? "text" : "password"}
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      placeholder="Nouveau mot de passe (8 car. min., lettres + chiffres)"
+                      autoComplete="new-password"
+                      className="h-9 rounded-xl pr-10 text-sm"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowNewPassword((prev) => !prev)}
+                      aria-label={showNewPassword ? "Masquer le mot de passe" : "Afficher le mot de passe"}
+                      className="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-400 transition-colors hover:text-[#0B393C]"
+                    >
+                      {showNewPassword ? <IconEyeOff size={15} /> : <IconEye size={15} />}
+                    </button>
+                  </div>
+
+                  <div className="relative">
+                    <Input
+                      type={showConfirmPassword ? "text" : "password"}
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      placeholder="Confirmer le nouveau mot de passe"
+                      autoComplete="new-password"
+                      className="h-9 rounded-xl pr-10 text-sm"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPassword((prev) => !prev)}
+                      aria-label={showConfirmPassword ? "Masquer le mot de passe" : "Afficher le mot de passe"}
+                      className="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-400 transition-colors hover:text-[#0B393C]"
+                    >
+                      {showConfirmPassword ? <IconEyeOff size={15} /> : <IconEye size={15} />}
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -528,6 +564,7 @@ export function TuteurProfilClient({ payload }: { payload: TuteurProfilePayload 
               </div>
             </CardContent>
           </Card>
+
         </div>
       )}
     </div>

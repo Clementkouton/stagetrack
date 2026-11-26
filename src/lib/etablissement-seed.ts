@@ -25,7 +25,7 @@ export const SUPERVISOR_PASSWORD = "StageTrack@2026!";
 export const TUTOR_EMAIL = "serge.dossou@kkiapay.me";
 export const TUTOR_PASSWORD = "StageTrack@2026!";
 /** Charge maximale d'encadrement d'un Maître de Mémoire. */
-export const SUPERVISOR_MAX_WORKLOAD = 6;
+export const SUPERVISOR_MAX_WORKLOAD = 15;
 
 const addDays = (d: Date, n: number): Date => new Date(d.getTime() + n * 86400000);
 
