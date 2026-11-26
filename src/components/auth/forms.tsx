@@ -21,6 +21,7 @@ import {
   IconUser,
 } from "@tabler/icons-react";
 import { AnimatePresence, motion } from "framer-motion";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   useForm,
@@ -55,7 +56,6 @@ import {
   VILLES,
   detectInstitution,
   passwordStrength,
-  simulateAuthRequest,
 } from "@/lib/auth";
 import {
   companyLoginSchema,
@@ -74,8 +74,53 @@ import {
 import { cn } from "@/lib/utils";
 
 export interface AuthFormProps {
-  onSuccess: () => void;
+  /** Appelé après authentification réussie avec l'URL de redirection fournie par l'API. */
+  onSuccess: (redirect?: string) => void;
 }
+
+/* ------------------------------------------------------------------ */
+/*  Appels API réels (scrypt + JWT stagetrack_session)                 */
+/* ------------------------------------------------------------------ */
+
+interface AuthApiResponse {
+  ok: boolean;
+  redirect?: string;
+  error?: string;
+}
+
+/** POST /api/auth/login — retourne l'URL de destination ou lève une erreur FR. */
+async function postLogin(payload: {
+  identifier: string;
+  password: string;
+  space: "etudiant" | "entreprise" | "etablissement";
+}): Promise<string> {
+  const response = await fetch("/api/auth/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const data = (await response.json()) as AuthApiResponse;
+  if (!response.ok || !data.ok) {
+    throw new Error(data.error ?? "Connexion impossible. Vérifiez vos identifiants.");
+  }
+  return data.redirect ?? "/";
+}
+
+/** POST /api/auth/register — crée le compte puis connecte (JWT). */
+async function postRegister(payload: Record<string, unknown>): Promise<string> {
+  const response = await fetch("/api/auth/register", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const data = (await response.json()) as AuthApiResponse;
+  if (!response.ok || !data.ok) {
+    throw new Error(data.error ?? "Inscription impossible. Vérifiez vos informations.");
+  }
+  return data.redirect ?? "/";
+}
+
+
 
 const selectOptions = (values: readonly string[]) =>
   values.map((value) => ({ value, label: value }));
@@ -345,17 +390,32 @@ function ForgotPasswordLink() {
 
 export function StudentLoginForm({ onSuccess }: AuthFormProps) {
   const [pending, setPending] = useState(false);
+  const { toast } = useToast();
+  const router = useRouter();
   const form = useForm<StudentLoginValues>({
     resolver: zodResolver(studentLoginSchema),
     mode: "onTouched",
     defaultValues: { matricule: "", password: "" },
   });
 
-  const handleSubmit = form.handleSubmit(async () => {
+  const handleSubmit = form.handleSubmit(async (values) => {
     setPending(true);
-    await simulateAuthRequest();
-    setPending(false);
-    onSuccess();
+    try {
+      const redirect = await postLogin({
+        identifier: values.matricule,
+        password: values.password,
+        space: "etudiant",
+      });
+      toast({
+        title: "Connexion réussie !",
+        description: "Bienvenue sur votre espace étudiant StageTrack.",
+      });
+      onSuccess(redirect);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Connexion impossible.";
+      toast({ title: "Connexion impossible", description: message, variant: "destructive" });
+      setPending(false);
+    }
   });
 
   return (
@@ -417,11 +477,23 @@ export function StudentSignupForm({ onSuccess }: AuthFormProps) {
     }
   }, [detectedInstitutionId, form]);
 
-  const handleSubmit = form.handleSubmit(async () => {
+  const { toast } = useToast();
+  const router = useRouter();
+  const handleSubmit = form.handleSubmit(async (values) => {
     setPending(true);
-    await simulateAuthRequest();
-    setPending(false);
-    onSuccess();
+    try {
+      const redirect = await postRegister({ space: "etudiant", ...values });
+      toast({
+        title: "Compte créé avec succès !",
+        description: "Complétez votre rattachement académique pour accéder à votre espace.",
+      });
+      onSuccess(redirect);
+      router.refresh();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Inscription impossible.";
+      toast({ title: "Inscription impossible", description: message, variant: "destructive" });
+      setPending(false);
+    }
   });
 
   const showManualSelect = !detection && matricule.trim().length >= 3;
@@ -538,17 +610,32 @@ export function StudentSignupForm({ onSuccess }: AuthFormProps) {
 
 export function CompanyLoginForm({ onSuccess }: AuthFormProps) {
   const [pending, setPending] = useState(false);
+  const { toast } = useToast();
+  const router = useRouter();
   const form = useForm<CompanyLoginValues>({
     resolver: zodResolver(companyLoginSchema),
     mode: "onTouched",
     defaultValues: { email: "", password: "" },
   });
 
-  const handleSubmit = form.handleSubmit(async () => {
+  const handleSubmit = form.handleSubmit(async (values) => {
     setPending(true);
-    await simulateAuthRequest();
-    setPending(false);
-    onSuccess();
+    try {
+      const redirect = await postLogin({
+        identifier: values.email,
+        password: values.password,
+        space: "entreprise",
+      });
+      toast({
+        title: "Connexion réussie !",
+        description: "Bienvenue sur votre portail entreprise StageTrack.",
+      });
+      onSuccess(redirect);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Connexion impossible.";
+      toast({ title: "Connexion impossible", description: message, variant: "destructive" });
+      setPending(false);
+    }
   });
 
   return (
@@ -586,17 +673,29 @@ export function CompanyLoginForm({ onSuccess }: AuthFormProps) {
 
 export function CompanySignupForm({ onSuccess }: AuthFormProps) {
   const [pending, setPending] = useState(false);
+  const { toast } = useToast();
+  const router = useRouter();
   const form = useForm<CompanySignupValues>({
     resolver: zodResolver(companySignupSchema),
     mode: "onTouched",
     defaultValues: { companyName: "", sector: "", city: "", email: "", contactName: "", password: "" },
   });
 
-  const handleSubmit = form.handleSubmit(async () => {
+  const handleSubmit = form.handleSubmit(async (values) => {
     setPending(true);
-    await simulateAuthRequest();
-    setPending(false);
-    onSuccess();
+    try {
+      const redirect = await postRegister({ space: "entreprise", ...values });
+      toast({
+        title: "Espace entreprise créé !",
+        description: "Complétez la vitrine de votre entreprise pour accéder à votre portail.",
+      });
+      onSuccess(redirect);
+      router.refresh();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Inscription impossible.";
+      toast({ title: "Inscription impossible", description: message, variant: "destructive" });
+      setPending(false);
+    }
   });
 
   return (
@@ -665,17 +764,32 @@ export function CompanySignupForm({ onSuccess }: AuthFormProps) {
 
 export function UniversityLoginForm({ onSuccess }: AuthFormProps) {
   const [pending, setPending] = useState(false);
+  const { toast } = useToast();
+  const router = useRouter();
   const form = useForm<UniversityLoginValues>({
     resolver: zodResolver(universityLoginSchema),
     mode: "onTouched",
     defaultValues: { email: "", password: "" },
   });
 
-  const handleSubmit = form.handleSubmit(async () => {
+  const handleSubmit = form.handleSubmit(async (values) => {
     setPending(true);
-    await simulateAuthRequest();
-    setPending(false);
-    onSuccess();
+    try {
+      const redirect = await postLogin({
+        identifier: values.email,
+        password: values.password,
+        space: "etablissement",
+      });
+      toast({
+        title: "Connexion réussie !",
+        description: "Bienvenue sur votre espace établissement StageTrack.",
+      });
+      onSuccess(redirect);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Connexion impossible.";
+      toast({ title: "Connexion impossible", description: message, variant: "destructive" });
+      setPending(false);
+    }
   });
 
   return (
@@ -713,17 +827,29 @@ export function UniversityLoginForm({ onSuccess }: AuthFormProps) {
 
 export function UniversitySignupForm({ onSuccess }: AuthFormProps) {
   const [pending, setPending] = useState(false);
+  const { toast } = useToast();
+  const router = useRouter();
   const form = useForm<UniversitySignupValues>({
     resolver: zodResolver(universitySignupSchema),
     mode: "onTouched",
     defaultValues: { institutionName: "", acronym: "", email: "", referentRole: "", password: "" },
   });
 
-  const handleSubmit = form.handleSubmit(async () => {
+  const handleSubmit = form.handleSubmit(async (values) => {
     setPending(true);
-    await simulateAuthRequest();
-    setPending(false);
-    onSuccess();
+    try {
+      const redirect = await postRegister({ space: "universite", ...values });
+      toast({
+        title: "Espace établissement créé !",
+        description: "Complétez les paramètres de votre établissement pour accéder à votre portail.",
+      });
+      onSuccess(redirect);
+      router.refresh();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Inscription impossible.";
+      toast({ title: "Inscription impossible", description: message, variant: "destructive" });
+      setPending(false);
+    }
   });
 
   return (

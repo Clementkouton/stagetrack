@@ -116,11 +116,13 @@ export function AuthFlow({
     setStatus("idle");
   };
 
-  const handleAuthSuccess = (nextRole: Role) => {
+  const handleAuthSuccess = (nextRole: Role, redirect?: string) => {
     setStatus("success");
     window.setTimeout(() => {
       onComplete?.();
-      router.push(ROLE_REDIRECT[nextRole]);
+      // Redirection calculée par l'API (onboarding profileCompleted=false,
+      // Maître de Mémoire → encadrement, sinon dashboard du rôle).
+      router.push(redirect ?? ROLE_REDIRECT[nextRole]);
     }, 1800);
   };
 
@@ -383,7 +385,7 @@ function AuthScreen({
   onModeChange: (mode: AuthMode) => void;
   layoutId: string;
   onBack: () => void;
-  onSuccess: (role: Role) => void;
+  onSuccess: (role: Role, redirect?: string) => void;
 }) {
   const card = ROLE_CARDS.find((c) => c.role === role) ?? ROLE_CARDS[0];
   const ActiveForm = ROLE_FORMS[role][mode];
@@ -425,7 +427,7 @@ function AuthScreen({
             exit={{ opacity: 0, y: -8 }}
             transition={{ duration: 0.25, ease: EASE }}
           >
-            <ActiveForm onSuccess={() => onSuccess(role)} />
+            <ActiveForm onSuccess={(redirect?: string) => onSuccess(role, redirect)} />
           </motion.div>
         </AnimatePresence>
       </div>

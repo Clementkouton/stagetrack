@@ -7,7 +7,10 @@
 //     + suivi (tâches, présences, journaux) + documents & évaluations
 // Les ponts entre couches sont les champs optionnels
 // TeamMember.userId, Candidature.studentId, Intern.studentId,
-// Intern.universityId (aucune rupture de données existante).
+// Intern.universityId, StudentProfile.departmentId (aucune rupture de données).
+// Hiérarchie universitaire : UniversityProfile → Department → UniversityMember
+// (Chef de Département) → StudentProfile. Conventions : visa pédagogique
+// (pedagogicalApproved) puis signature Direction des Stages (signedUniversity).
 // ============================================================
 
 generator client {
@@ -32,23 +35,32 @@ enum Role {
   ADMIN
 }
 
+// Rôle d'un membre de l'administration universitaire
+enum UniversityMemberRole {
+  ADMIN_SCHOOL // Direction des Stages (administration centrale)
+  HEAD_OF_DEPARTMENT // Chef de Département
+  ACADEMIC_SUPERVISOR // Maître de Mémoire / Encadreur académique
+}
+
 // ==========================================
 // UTILISATEURS & ENTITÉS PRINCIPALES
 // ==========================================
 
 model User {
-  id           String   @id @default(cuid())
-  email        String   @unique
-  passwordHash String
-  fullName     String
-  role         Role
-  avatarUrl    String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id               String   @id @default(cuid())
+  email            String   @unique
+  passwordHash     String // scrypt natif Node.js : "scrypt:<saltHex>:<hashHex>"
+  fullName         String
+  role             Role
+  avatarUrl        String?
+  profileCompleted Boolean  @default(false) // false → première connexion : onboarding obligatoire
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
-  studentProfile StudentProfile?
-  teamMember     TeamMember? // Compte entreprise rattaché à un membre de l'équipe
-  university     UniversityProfile?
+  studentProfile   StudentProfile?
+  teamMember       TeamMember? // Compte entreprise rattaché à un membre de l'équipe
+  university       UniversityProfile?
+  universityMember UniversityMember? // Compte université (Admin École ou Chef de Département)
 }
 
 model UniversityProfile {
@@ -60,8 +72,48 @@ model UniversityProfile {
   city      String?
   createdAt DateTime @default(now())
 
-  students StudentProfile[]
-  interns  Intern[] // Stagiaires issus de cette université
+  students    StudentProfile[]
+  interns     Intern[] // Stagiaires issus de cette université
+  departments Department[] // Départements pédagogiques (GEI, GC, GMP…)
+  members     UniversityMember[] // Admin École + Chefs de Département
+}
+
+// Département pédagogique d'une université (ex. Génie Électrique et Informatique — GEI)
+model Department {
+  id           String            @id @default(cuid())
+  universityId String
+  university   UniversityProfile @relation(fields: [universityId], references: [id], onDelete: Cascade)
+  name         String // Ex : "Génie Électrique et Informatique"
+  code         String // Ex : "GEI"
+  specialties  String[] // Ex : ["Informatique Industrielle", "Télécommunications", "Réseaux"]
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  members     UniversityMember[]
+  students    StudentProfile[]
+  interns     Intern[]
+  conventions Convention[]
+  createdBy   UniversityMember[] @relation("DepartmentCreator")
+
+  @@unique([universityId, code])
+}
+
+// Membre de l'administration universitaire : Admin École ou Chef de Département
+model UniversityMember {
+  id           String               @id @default(cuid())
+  userId       String               @unique
+  user         User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  universityId String
+  university   UniversityProfile    @relation(fields: [universityId], references: [id], onDelete: Cascade)
+  departmentId String?
+  department   Department?          @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  role         UniversityMemberRole @default(HEAD_OF_DEPARTMENT)
+  title        String? // Ex : "Chef du Département GEI", "Maître de Mémoire" ou "Directeur des Stages"
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+
+  supervisedInternships Intern[] @relation("ThesisSupervisor") // Stages encadrés en tant que Maître de Mémoire
+  createdDepartments    Department[] @relation("DepartmentCreator") // Départements créés par ce membre (audit)
 }
 
 model StudentProfile {
@@ -71,8 +123,11 @@ model StudentProfile {
   matricule    String             @unique // Identifiant unique étudiant pour la connexion
   universityId String?
   university   UniversityProfile? @relation(fields: [universityId], references: [id])
+  departmentId String? // Département pédagogique de rattachement
+  department   Department?        @relation(fields: [departmentId], references: [id], onDelete: SetNull)
   schoolName   String? // Détecté via le matricule si l'université n'est pas encore inscrite
   fieldOfStudy String?
+  specialty    String? // Spécialité choisie au sein du département
   level        String? // Ex : Licence 3, Master 1, Master 2
   phone        String?
   cvUrl        String?
@@ -81,6 +136,7 @@ model StudentProfile {
 
   candidatures Candidature[] // Candidatures envoyées (ex "Application")
   internships  Intern[] // Stages effectués (ex "Internship")
+  documents    StudentDocument[] // Coffre-fort documentaire (ex "Document")
 }
 
 // ==========================================
@@ -113,6 +169,7 @@ model TeamMember {
   name      String
   email     String   @unique
   role      String // ADMIN_RH | TUTEUR
+  position  String? // Poste / fonction du membre (ex. « Ingénieur DevOps », « Tuteur technique »)
   phone     String?
   active    Boolean  @default(true)
   createdAt DateTime @default(now())
@@ -187,6 +244,8 @@ model Intern {
   student       StudentProfile?    @relation(fields: [studentId], references: [id], onDelete: SetNull)
   universityId  String? // Lien optionnel avec l'université d'origine
   universityRef UniversityProfile? @relation(fields: [universityId], references: [id], onDelete: SetNull)
+  departmentId  String? // Département pédagogique de l'étudiant en stage
+  department    Department?        @relation(fields: [departmentId], references: [id], onDelete: SetNull)
   name          String
   matricule     String
   university    String
@@ -194,6 +253,15 @@ model Intern {
   position      String
   tutorId       String?
   tutor         TeamMember?        @relation("InternTutor", fields: [tutorId], references: [id], onDelete: SetNull)
+  thesisSupervisorId String?      // Maître de Mémoire (encadrement académique côté université)
+  thesisSupervisor   UniversityMember? @relation("ThesisSupervisor", fields: [thesisSupervisorId], references: [id], onDelete: SetNull)
+  thesisTitle   String?            // Intitulé du mémoire rattaché au stage
+  thesisTopic   String?            // Problématique / thème détaillé soumis par l'étudiant
+  thesisPlan    String?            // Plan provisoire du mémoire (chapitres, une ligne chacun)
+  thesisFileUrl String?            // Lien vers le document du mémoire (PDF / Drive)
+  thesisStatus  String  @default("A_VALIDER") // A_VALIDER | TOPIC_APPROVED | REVISION_REQUESTED | READY_TO_DEFEND
+  supervisorFeedback String?      // Commentaires du Maître de Mémoire (corrections demandées…)
+  approvedToDefendAt DateTime?    // Date de délivrance du « Bon à Soutenir »
   startDate     DateTime
   endDate       DateTime
   totalWeeks    Int                @default(12)
@@ -209,6 +277,7 @@ model Intern {
   evaluation     Evaluation?
   attestation    Attestation?
   conventions    Convention[]
+  documents      StudentDocument[]
 }
 
 model InternshipTask {
@@ -218,7 +287,7 @@ model InternshipTask {
   title       String
   description String?
   week        Int
-  status      String   @default("A_FAIRE") // A_FAIRE | EN_COURS | VALIDE
+  status      String   @default("TODO") // TODO | IN_PROGRESS | IN_REVIEW | DONE
   aiSuggested Boolean  @default(false)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -241,6 +310,7 @@ model WeeklyJournal {
   intern    Intern   @relation(fields: [internId], references: [id], onDelete: Cascade)
   week      Int
   content   String
+  tutorFeedback String? // Retour du tuteur / maître de stage sur le journal
   createdAt DateTime @default(now())
 }
 
@@ -249,37 +319,42 @@ model WeeklyJournal {
 // ==========================================
 
 model Convention {
-  id               String    @id @default(cuid())
-  companyId        String
-  company          Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  internId         String?
-  intern           Intern?   @relation(fields: [internId], references: [id], onDelete: SetNull)
-  reference        String    @unique
-  studentName      String
-  university       String
-  position         String
-  status           String    @default("EN_ATTENTE") // SIGNEE | EN_ATTENTE
-  signedStudent    Boolean   @default(false) // Signature Étudiant
-  signedCompany    Boolean   @default(false) // Signature Entreprise
-  signedUniversity Boolean   @default(false) // Signature Université
-  startDate        DateTime?
-  endDate          DateTime?
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  id                  String      @id @default(cuid())
+  companyId           String
+  company             Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  internId            String?
+  intern              Intern?     @relation(fields: [internId], references: [id], onDelete: SetNull)
+  reference           String      @unique
+  studentName         String
+  university          String
+  position            String
+  status              String      @default("EN_ATTENTE") // SIGNEE | EN_ATTENTE
+  signedStudent       Boolean     @default(false) // Étape 1 : Signature Étudiant
+  signedCompany       Boolean     @default(false) // Étape 2 : Signature Entreprise
+  signedUniversity    Boolean     @default(false) // Étape 4 : Signature Direction des Stages
+  pedagogicalApproved Boolean     @default(false) // Étape 3 : Visa pédagogique du Chef de Département
+  pedagogicalNote     String? // Note d'avis du Chef de Département
+  departmentId        String? // Département pédagogique (filtre de la vue Établissement)
+  department          Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  startDate           DateTime?
+  endDate             DateTime?
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
 }
 
 model Evaluation {
-  id           String   @id @default(cuid())
-  internId     String   @unique
-  intern       Intern   @relation(fields: [internId], references: [id], onDelete: Cascade)
-  technique    Int      @default(0) // note /5
-  ponctualite  Int      @default(0) // note /5
-  autonomie    Int      @default(0) // note /5
-  espritEquipe Int      @default(0) // note /5
-  appreciation String   @default("")
-  finalized    Boolean  @default(false)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id             String   @id @default(cuid())
+  internId       String   @unique
+  intern         Intern   @relation(fields: [internId], references: [id], onDelete: Cascade)
+  technique      Int      @default(0) // note /5
+  ponctualite    Int      @default(0) // note /5
+  autonomie      Int      @default(0) // note /5
+  espritEquipe   Int      @default(0) // note /5
+  appreciation   String   @default("")
+  recommandation String   @default("NEUTRE") // FORTEMENT_RECOMMANDE | RECOMMANDE | NEUTRE | NON_RECOMMANDE
+  finalized      Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 }
 
 model Attestation {
@@ -289,4 +364,21 @@ model Attestation {
   reference   String   @unique
   content     String
   generatedAt DateTime @default(now())
+}
+
+// Coffre-fort documentaire de l'étudiant (ex "Document") :
+// pièces administratives déposées (identité, assurance, rapport…) ou
+// rattachées à un stage précis (rapport de stage). Fichier stocké soit
+// sous forme d'URL externe, soit de data URL (petits fichiers).
+model StudentDocument {
+  id         String         @id @default(cuid())
+  studentId  String
+  student    StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  internId   String?
+  intern     Intern?        @relation(fields: [internId], references: [id], onDelete: SetNull)
+  type       String // PIECE_IDENTITE | ASSURANCE | RAPPORT_STAGE | CV | AUTRE
+  name       String
+  url        String?
+  content    String?
+  uploadedAt DateTime       @default(now())
 }

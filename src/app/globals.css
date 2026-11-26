@@ -59,6 +59,9 @@
 
 :root {
   --radius: 0.625rem;
+  /* Police de marque StageTrack : Plus Jakarta Sans (CDN) avec
+     repli automatique sur la pile système si le réseau est absent. */
+  --font-jakarta: "Plus Jakarta Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
@@ -133,4 +136,11 @@
   body {
     @apply bg-background text-foreground;
   }
+}
+
+/* Sidebar entreprise (mobile) — rendue via un portal Sheet : fond de marque */
+div[data-slot="sidebar"][data-sidebar="sidebar"][data-mobile="true"] {
+  background-color: var(--color-brand);
+  color: #ffffff;
+  border: none;
 }

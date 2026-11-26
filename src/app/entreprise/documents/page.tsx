@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { getEntrepriseCompanyId, getEntrepriseInternWhere } from "@/lib/entreprise-data";
 import {
   DocumentsClient,
   type AttestableIntern,
@@ -8,12 +9,15 @@ import {
 export const dynamic = "force-dynamic";
 
 export default async function EntrepriseDocumentsPage() {
+  const internWhere = await getEntrepriseInternWhere();
+  const companyId = await getEntrepriseCompanyId();
   const [conventions, finishedInterns] = await Promise.all([
     db.convention.findMany({
+      where: { companyId },
       orderBy: [{ status: "asc" }, { createdAt: "desc" }],
     }),
     db.intern.findMany({
-      where: { status: "TERMINE" },
+      where: { ...internWhere, status: "TERMINE" },
       orderBy: { endDate: "desc" },
       include: { attestation: true },
     }),

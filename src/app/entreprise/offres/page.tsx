@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { getEntrepriseCompanyId } from "@/lib/entreprise-data";
 import { OffersClient, type OfferRow } from "@/components/entreprise/offers-client";
 
 export const dynamic = "force-dynamic";
@@ -9,7 +10,9 @@ export default async function EntrepriseOffersPage({
   searchParams: Promise<{ create?: string }>;
 }) {
   const params = await searchParams;
+  const companyId = await getEntrepriseCompanyId();
   const offers = await db.offer.findMany({
+    where: { companyId },
     orderBy: { createdAt: "desc" },
     include: { _count: { select: { candidatures: true } } },
   });

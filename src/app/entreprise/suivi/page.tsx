@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { getEntrepriseInternWhere } from "@/lib/entreprise-data";
 import {
   SuiviClient,
   type JournalRow,
@@ -10,21 +11,25 @@ import {
 export const dynamic = "force-dynamic";
 
 export default async function EntrepriseSuiviPage() {
+  const internWhere = await getEntrepriseInternWhere();
   const [interns, tasks, presences, journals] = await Promise.all([
     db.intern.findMany({
-      where: { status: "ACTIF" },
+      where: { ...internWhere, status: "ACTIF" },
       orderBy: { name: "asc" },
       select: { id: true, name: true, position: true, startDate: true, totalWeeks: true },
     }),
     db.internshipTask.findMany({
+      where: { intern: internWhere },
       orderBy: [{ week: "desc" }, { createdAt: "desc" }],
       include: { intern: { select: { name: true } } },
     }),
     db.presenceSheet.findMany({
+      where: { intern: internWhere },
       orderBy: [{ status: "asc" }, { submittedAt: "desc" }],
       include: { intern: { select: { name: true, position: true } } },
     }),
     db.weeklyJournal.findMany({
+      where: { intern: internWhere },
       orderBy: { week: "desc" },
       include: { intern: { select: { name: true, position: true } } },
     }),
@@ -67,10 +72,12 @@ export default async function EntrepriseSuiviPage() {
 
   const journalRows: JournalRow[] = journals.map((j) => ({
     id: j.id,
+    internId: j.internId,
     internName: j.intern.name,
     position: j.intern.position,
     week: j.week,
     content: j.content,
+    tutorFeedback: j.tutorFeedback,
   }));
 
   return <SuiviClient interns={suiviInterns} tasks={taskRows} presences={presenceRows} journals={journalRows} />;

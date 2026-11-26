@@ -1,0 +1,292 @@
+// ============================================================
+// StageTrack — Schéma Prisma (PostgreSQL / Neon)
+// ------------------------------------------------------------
+// Une seule source de vérité, en deux couches reliées :
+//  1. Auth & profils   : User / UniversityProfile / StudentProfile
+//  2. Dashboard métier : Company / Offer / Candidature / Intern
+//     + suivi (tâches, présences, journaux) + documents & évaluations
+// Les ponts entre couches sont les champs optionnels
+// TeamMember.userId, Candidature.studentId, Intern.studentId,
+// Intern.universityId (aucune rupture de données existante).
+// ============================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL") // Recommandé par Neon pour les migrations Prisma
+}
+
+// ==========================================
+// ENUMS (uniquement ceux réellement utilisés)
+// ==========================================
+
+// Rôle global d'un compte utilisateur
+enum Role {
+  STUDENT
+  COMPANY
+  UNIVERSITY
+  ADMIN
+}
+
+// ==========================================
+// UTILISATEURS & ENTITÉS PRINCIPALES
+// ==========================================
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  fullName     String
+  role         Role
+  avatarUrl    String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  studentProfile StudentProfile?
+  teamMember     TeamMember? // Compte entreprise rattaché à un membre de l'équipe
+  university     UniversityProfile?
+}
+
+model UniversityProfile {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String // Ex : Institut de Formation et de Recherche en Informatique (IFRI)
+  acronym   String   @unique // Ex : IFRI, ENEAM, EPAC
+  city      String?
+  createdAt DateTime @default(now())
+
+  students StudentProfile[]
+  interns  Intern[] // Stagiaires issus de cette université
+}
+
+model StudentProfile {
+  id           String             @id @default(cuid())
+  userId       String             @unique
+  user         User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  matricule    String             @unique // Identifiant unique étudiant pour la connexion
+  universityId String?
+  university   UniversityProfile? @relation(fields: [universityId], references: [id])
+  schoolName   String? // Détecté via le matricule si l'université n'est pas encore inscrite
+  fieldOfStudy String?
+  level        String? // Ex : Licence 3, Master 1, Master 2
+  phone        String?
+  cvUrl        String?
+  skills       String[]
+  createdAt    DateTime           @default(now())
+
+  candidatures Candidature[] // Candidatures envoyées (ex "Application")
+  internships  Intern[] // Stages effectués (ex "Internship")
+}
+
+// ==========================================
+// ENTREPRISE & ÉQUIPE
+// ==========================================
+
+model Company {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  sector      String
+  city        String
+  description String
+  website     String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  offers       Offer[]
+  candidatures Candidature[]
+  interns      Intern[]
+  conventions  Convention[]
+  team         TeamMember[]
+}
+
+model TeamMember {
+  id        String   @id @default(cuid())
+  companyId String
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  userId    String?  @unique // Lien avec le compte User (connexion côté entreprise)
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  name      String
+  email     String   @unique
+  role      String // ADMIN_RH | TUTEUR
+  phone     String?
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  interns Intern[] @relation("InternTutor")
+}
+
+// ==========================================
+// OFFRES & CANDIDATURES (ATS)
+// ==========================================
+
+model Offer {
+  id            String   @id @default(cuid())
+  companyId     String
+  company       Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  title         String
+  sector        String
+  city          String
+  duration      String // ex. "6 mois"
+  workMode      String // SUR_SITE | HYBRIDE | TELETRAVAIL
+  contractType  String // STAGE_ACADEMIQUE | PRE_EMBAUCHE
+  gratification String?
+  description   String
+  missions      String // une mission par ligne
+  skills        String // une compétence par ligne
+  status        String   @default("BROUILLON") // PUBLIEE | BROUILLON | POURVUE
+  aiGenerated   Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  candidatures Candidature[]
+}
+
+model Candidature {
+  id          String          @id @default(cuid())
+  companyId   String
+  company     Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  offerId     String?
+  offer       Offer?          @relation(fields: [offerId], references: [id], onDelete: SetNull)
+  studentId   String? // Renseigné si la candidature vient d'un étudiant connecté
+  student     StudentProfile? @relation(fields: [studentId], references: [id], onDelete: SetNull)
+  studentName String
+  matricule   String
+  university  String
+  email       String
+  phone       String?
+  cvSummary   String
+  coverLetter String?
+  status      String          @default("NOUVELLE") // NOUVELLE | PRESELECTIONNEE | ENTRETIEN_PLANIFIE | OFFRE_ENVOYEE | ACCEPTEE | REFUSEE
+  interviewAt DateTime?
+  aiScore     Int?
+  aiSummary   String?
+  aiQuestions String          @default("") // 3 questions ciblées, une par ligne
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  intern Intern?
+}
+
+// ==========================================
+// STAGIAIRES & SUIVI OPÉRATIONNEL
+// ==========================================
+
+model Intern {
+  id            String             @id @default(cuid())
+  companyId     String
+  company       Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  candidatureId String?            @unique
+  candidature   Candidature?       @relation(fields: [candidatureId], references: [id], onDelete: SetNull)
+  studentId     String? // Lien optionnel avec le profil étudiant connecté
+  student       StudentProfile?    @relation(fields: [studentId], references: [id], onDelete: SetNull)
+  universityId  String? // Lien optionnel avec l'université d'origine
+  universityRef UniversityProfile? @relation(fields: [universityId], references: [id], onDelete: SetNull)
+  name          String
+  matricule     String
+  university    String
+  email         String
+  position      String
+  tutorId       String?
+  tutor         TeamMember?        @relation("InternTutor", fields: [tutorId], references: [id], onDelete: SetNull)
+  startDate     DateTime
+  endDate       DateTime
+  totalWeeks    Int                @default(12)
+  status        String             @default("ACTIF") // ACTIF | TERMINE
+  vivierTag     Boolean            @default(false)
+  onboarding    String             @default("") // checklist : "1|Tâche|[x]" par ligne
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+
+  tasks          InternshipTask[]
+  presenceSheets PresenceSheet[]
+  journals       WeeklyJournal[]
+  evaluation     Evaluation?
+  attestation    Attestation?
+  conventions    Convention[]
+}
+
+model InternshipTask {
+  id          String   @id @default(cuid())
+  internId    String
+  intern      Intern   @relation(fields: [internId], references: [id], onDelete: Cascade)
+  title       String
+  description String?
+  week        Int
+  status      String   @default("A_FAIRE") // A_FAIRE | EN_COURS | VALIDE
+  aiSuggested Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model PresenceSheet {
+  id          String   @id @default(cuid())
+  internId    String
+  intern      Intern   @relation(fields: [internId], references: [id], onDelete: Cascade)
+  periodLabel String // ex. "Semaine 8 (16 – 20 nov.)"
+  daysPresent Int
+  totalDays   Int      @default(5)
+  status      String   @default("A_VALIDER") // A_VALIDER | VALIDEE | REJETEE
+  submittedAt DateTime @default(now())
+}
+
+model WeeklyJournal {
+  id        String   @id @default(cuid())
+  internId  String
+  intern    Intern   @relation(fields: [internId], references: [id], onDelete: Cascade)
+  week      Int
+  content   String
+  createdAt DateTime @default(now())
+}
+
+// ==========================================
+// DOCUMENTS, ÉVALUATIONS, ATTESTATIONS
+// ==========================================
+
+model Convention {
+  id               String    @id @default(cuid())
+  companyId        String
+  company          Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  internId         String?
+  intern           Intern?   @relation(fields: [internId], references: [id], onDelete: SetNull)
+  reference        String    @unique
+  studentName      String
+  university       String
+  position         String
+  status           String    @default("EN_ATTENTE") // SIGNEE | EN_ATTENTE
+  signedStudent    Boolean   @default(false) // Signature Étudiant
+  signedCompany    Boolean   @default(false) // Signature Entreprise
+  signedUniversity Boolean   @default(false) // Signature Université
+  startDate        DateTime?
+  endDate          DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+}
+
+model Evaluation {
+  id           String   @id @default(cuid())
+  internId     String   @unique
+  intern       Intern   @relation(fields: [internId], references: [id], onDelete: Cascade)
+  technique    Int      @default(0) // note /5
+  ponctualite  Int      @default(0) // note /5
+  autonomie    Int      @default(0) // note /5
+  espritEquipe Int      @default(0) // note /5
+  appreciation String   @default("")
+  finalized    Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Attestation {
+  id          String   @id @default(cuid())
+  internId    String   @unique
+  intern      Intern   @relation(fields: [internId], references: [id], onDelete: Cascade)
+  reference   String   @unique
+  content     String
+  generatedAt DateTime @default(now())
+}

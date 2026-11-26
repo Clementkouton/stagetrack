@@ -1,13 +1,6 @@
 import type { Metadata } from "next";
-import { Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
-
-const jakarta = Plus_Jakarta_Sans({
-  variable: "--font-jakarta",
-  subsets: ["latin", "latin-ext"],
-  weight: ["300", "400", "500", "600", "700", "800"],
-});
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://stagetrack.bj"),
@@ -55,7 +48,14 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="fr" className={`${jakarta.variable} h-full scroll-smooth antialiased`}>
+    <html lang="fr" className="h-full scroll-smooth antialiased" data-scroll-behavior="smooth" suppressHydrationWarning>
+      <head>
+        {/* Police de marque chargée en CDN : si le réseau est indisponible,
+            la pile système définie dans --font-jakarta prend le relais. */}
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap"/>
+      </head>
       <body className="min-h-full bg-white font-sans text-ink antialiased">
         {children}
         <Toaster />

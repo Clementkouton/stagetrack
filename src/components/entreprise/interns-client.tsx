@@ -8,6 +8,7 @@ import { useMemo, useState, useTransition } from "react";
 import {
   IconAward,
   IconBook,
+  IconBooks,
   IconCalendarStats,
   IconCircleCheck,
   IconCircleX,
@@ -32,9 +33,15 @@ export interface InternCard {
   name: string;
   matricule: string;
   university: string;
+  /** Département pédagogique (ex. « Génie Électrique et Informatique (GEI) »). */
+  department: string | null;
   email: string;
   position: string;
   tutorName: string;
+  /** Maître de Mémoire (encadrement académique côté université). */
+  thesisSupervisor: { fullName: string; email: string; title: string | null } | null;
+  thesisTitle: string | null;
+  thesisStatus: string;
   startDate: string;
   endDate: string;
   totalWeeks: number;
@@ -43,6 +50,13 @@ export interface InternCard {
   vivierTag: boolean;
   onboarding: Array<{ label: string; done: boolean }>;
 }
+
+const THESIS_STATUS_LABELS: Record<string, string> = {
+  A_VALIDER: "Thème à valider",
+  TOPIC_APPROVED: "Thème validé",
+  REVISION_REQUESTED: "Corrections demandées",
+  READY_TO_DEFEND: "Bon à Soutenir délivré",
+};
 
 export function InternsClient({ interns }: { interns: InternCard[] }) {
   const [filter, setFilter] = useState<"ACTIF" | "TERMINE" | "TOUS">("ACTIF");
@@ -245,10 +259,36 @@ export function InternsClient({ interns }: { interns: InternCard[] }) {
                 <div className="rounded-xl border border-slate-200/80 p-3">
                   <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wide text-slate-400">
                     <IconSchool size={12} className="text-brand" />
-                    École d&apos;origine
+                    École / Département
                   </p>
                   <p className="mt-1 font-semibold text-ink">{selected.university}</p>
+                  {selected.department ? <p className="text-[11px] text-body">{selected.department}</p> : null}
                 </div>
+              </div>
+
+              {/* Encadrement académique */}
+              <div className="rounded-xl border border-gold/25 bg-gold/5 p-3">
+                <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wide text-gold-dark">
+                  <IconBooks size={12} />
+                  Encadrement académique
+                </p>
+                {selected.thesisSupervisor ? (
+                  <p className="mt-1 text-sm font-semibold text-ink">
+                    {selected.thesisSupervisor.title?.split("—")[0]?.trim() || "Maître de Mémoire"}{" "}
+                    {selected.thesisSupervisor.fullName}
+                    <span className="block text-[11px] font-normal text-body">{selected.thesisSupervisor.email}</span>
+                  </p>
+                ) : (
+                  <p className="mt-1 text-sm text-body">Maître de Mémoire non encore affecté par l&apos;université.</p>
+                )}
+                {selected.thesisTitle ? (
+                  <p className="mt-1.5 text-[11px] leading-snug text-body">
+                    Mémoire : <span className="font-semibold text-ink">{selected.thesisTitle}</span>
+                  </p>
+                ) : null}
+                <Badge variant="outline" className="mt-1.5 text-[9px] font-bold border-brand/25 bg-brand-50 text-brand">
+                  {THESIS_STATUS_LABELS[selected.thesisStatus] ?? selected.thesisStatus}
+                </Badge>
               </div>
 
               <div className="rounded-xl border border-slate-200/80 p-3.5">

@@ -1,3 +1,10 @@
+/**
+ * Tableau de bord Entreprise :
+ *  - Admin RH : KPI de recrutement (offres, candidatures, stagiaires, conventions),
+ *    graphique mensuel, fins de stage proches, feuilles de présence à valider ;
+ *  - Tuteur / Maître de Stage : 4 KPI personnels (mes stagiaires, feuilles à
+ *    valider, journaux sans retour, évaluations à finaliser) + actions urgentes.
+ */
 import Link from "next/link";
 import {
   IconArrowRight,
@@ -5,16 +12,23 @@ import {
   IconBriefcase,
   IconCalendarCheck,
   IconClipboardList,
+  IconNotebook,
   IconSignature,
   IconPlus,
   IconTrendingUp,
   IconUsersGroup,
+  IconCheck,
+  IconReportAnalytics,
+  IconClipboardCheck,
 } from "@tabler/icons-react";
 import { db } from "@/lib/db";
+import { getEntrepriseCompanyId, getEntrepriseInternWhere } from "@/lib/entreprise-data";
+import { getSessionUser } from "@/lib/session";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DashboardChart, type MonthlyPoint } from "@/components/entreprise/dashboard-chart";
+import { TuteurDashboard } from "@/components/entreprise/tuteur-dashboard";
 import { formatDateFr } from "@/lib/entreprise-format";
 
 export const dynamic = "force-dynamic";
@@ -45,15 +59,100 @@ function buildMonthlySeries(
 }
 
 export default async function EntrepriseDashboardPage() {
+  const sessionUser = await getSessionUser();
+  const isTuteur = sessionUser?.teamMember ? sessionUser.teamMember.role !== "ADMIN_RH" : false;
+
+  /* ---------------------- Espace Tuteur / Maître de Stage ---------------------- */
+  if (isTuteur) {
+    const internWhere = await getEntrepriseInternWhere();
+    const [internsActifs, presencesToValidate, journalsWithoutFeedback, tasksInReview, evaluations] = await Promise.all([
+      db.intern.findMany({
+        where: { ...internWhere, status: "ACTIF" },
+        orderBy: { name: "asc" },
+        select: { id: true, name: true, position: true, startDate: true, totalWeeks: true, endDate: true },
+      }),
+      db.presenceSheet.findMany({
+        where: { status: "A_VALIDER", intern: internWhere },
+        include: { intern: { select: { id: true, name: true, position: true } } },
+        orderBy: { submittedAt: "asc" },
+      }),
+      db.weeklyJournal.findMany({
+        where: { intern: internWhere, tutorFeedback: null },
+        include: { intern: { select: { id: true, name: true, position: true } } },
+        orderBy: { week: "desc" },
+      }),
+      db.internshipTask.findMany({
+        where: { intern: internWhere, status: { in: ["IN_REVIEW", "TODO"] } },
+        include: { intern: { select: { id: true, name: true, position: true } } },
+        orderBy: { updatedAt: "desc" },
+        take: 8,
+      }),
+      db.evaluation.findMany({
+        where: { intern: internWhere, finalized: false },
+        select: { internId: true, intern: { select: { name: true, position: true, status: true } } },
+      }),
+    ]);
+
+    return (
+      <TuteurDashboard
+        tutorName={sessionUser?.fullName ?? "Tuteur"}
+        kpis={{
+          internsActifs: internsActifs.length,
+          presencesToValidate: presencesToValidate.length,
+          journalsWithoutFeedback: journalsWithoutFeedback.length,
+          evaluationsToFinalize: evaluations.length,
+        }}
+        interns={internsActifs.map((i) => ({
+          id: i.id,
+          name: i.name,
+          position: i.position,
+          currentWeek: Math.max(1, Math.min(i.totalWeeks, Math.floor((Date.now() - i.startDate.getTime()) / (7 * 86400000)) + 1)),
+          totalWeeks: i.totalWeeks,
+        }))}
+        presences={presencesToValidate.map((p) => ({
+          id: p.id,
+          internName: p.intern.name,
+          periodLabel: p.periodLabel,
+          daysPresent: p.daysPresent,
+          totalDays: p.totalDays,
+        }))}
+        journals={journalsWithoutFeedback.slice(0, 6).map((j) => ({
+          id: j.id,
+          internId: j.intern.id,
+          internName: j.intern.name,
+          week: j.week,
+        }))}
+        tasks={tasksInReview.map((t) => ({
+          id: t.id,
+          internId: t.intern.id,
+          internName: t.intern.name,
+          title: t.title,
+          status: t.status,
+          week: t.week,
+        }))}
+        evaluations={evaluations.map((e) => ({
+          internId: e.internId,
+          internName: e.intern.name,
+          position: e.intern.position,
+        }))}
+      />
+    );
+  }
+
+  /* ------------------------------ Espace Admin RH ------------------------------ */
+  const companyId = await getEntrepriseCompanyId();
+  const internWhere = await getEntrepriseInternWhere();
+
   const [offersPUBLIEE, candidaturesTotal, internsACTIF, conventionsEN_ATTENTE] = await Promise.all([
-    db.offer.count({ where: { status: "PUBLIEE" } }),
-    db.candidature.count(),
-    db.intern.count({ where: { status: "ACTIF" } }),
-    db.convention.count({ where: { status: "EN_ATTENTE" } }),
+    db.offer.count({ where: { companyId, status: "PUBLIEE" } }),
+    db.candidature.count({ where: { companyId } }),
+    db.intern.count({ where: { ...internWhere, status: "ACTIF" } }),
+    db.convention.count({ where: { companyId, status: "EN_ATTENTE" } }),
   ]);
 
-  const candidatureRows = await db.candidature.findMany({ select: { createdAt: true } });
+  const candidatureRows = await db.candidature.findMany({ where: { companyId }, select: { createdAt: true } });
   const internRows = await db.intern.findMany({
+    where: internWhere,
     select: { id: true, name: true, position: true, startDate: true, endDate: true, status: true, university: true },
   });
 
@@ -66,7 +165,7 @@ export default async function EntrepriseDashboardPage() {
     lastMonth === 0 ? (thisMonth > 0 ? 100 : 0) : Math.round(((thisMonth - lastMonth) / lastMonth) * 100);
 
   const presencesToValidate = await db.presenceSheet.findMany({
-    where: { status: "A_VALIDER" },
+    where: { status: "A_VALIDER", intern: internWhere },
     include: { intern: { select: { name: true, position: true } } },
     orderBy: { submittedAt: "asc" },
   });
@@ -114,7 +213,7 @@ export default async function EntrepriseDashboardPage() {
         <div>
           <h1 className="text-2xl font-extrabold tracking-tight text-ink">Tableau de bord</h1>
           <p className="mt-1 text-sm text-body">
-            Bonjour Marcelle ! Voici l&apos;activité de recrutement et de suivi de vos stagiaires.
+            Bonjour {sessionUser?.fullName ?? "Marcelle"} ! Voici l&apos;activité de recrutement et de suivi de vos stagiaires.
           </p>
         </div>
         <Button asChild className="h-10 gap-2 rounded-xl bg-brand px-4 text-sm font-semibold hover:bg-brand-dark">

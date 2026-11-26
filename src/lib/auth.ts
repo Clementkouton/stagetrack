@@ -139,12 +139,10 @@ export const VILLES = [
 ] as const;
 
 export const FONCTIONS_REFERENT = [
-  "Responsable RH",
-  "Chef de département",
-  "Responsable pédagogique",
-  "Chargé(e) des stages",
   "Directeur / Directrice",
-  "Autre fonction",
+  "Secrétaire général(e)",
+  "Responsable pédagogique",
+  "Responsable RH",
 ] as const;
 
 /* ------------------------------------------------------------------ */

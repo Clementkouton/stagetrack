@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { getEntrepriseCompanyId } from "@/lib/entreprise-data";
 import {
   CandidaturesClient,
   type CandidatureRow,
@@ -19,13 +20,15 @@ const STATUS_KEYS = new Set<CandidatureStatus>([
 ]);
 
 export default async function EntrepriseCandidaturesPage() {
+  const companyId = await getEntrepriseCompanyId();
   const [candidatures, offers, tutors] = await Promise.all([
     db.candidature.findMany({
+      where: { companyId },
       orderBy: { createdAt: "desc" },
       include: { offer: { select: { title: true } } },
     }),
-    db.offer.findMany({ select: { id: true, title: true }, orderBy: { createdAt: "desc" } }),
-    db.teamMember.findMany({ select: { id: true, name: true, role: true }, where: { active: true } }),
+    db.offer.findMany({ where: { companyId }, select: { id: true, title: true }, orderBy: { createdAt: "desc" } }),
+    db.teamMember.findMany({ where: { companyId, active: true }, select: { id: true, name: true, role: true } }),
   ]);
 
   const rows: CandidatureRow[] = candidatures.map((c) => ({

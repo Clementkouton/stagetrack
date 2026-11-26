@@ -111,7 +111,7 @@ export default function AuthPage() {
 
       {/* Flux d'authentification */}
       <main className="relative flex flex-1 flex-col px-4 py-10 sm:px-8 sm:py-14">
-        <div className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center">
+        <div className="mx-auto flex w-full max-w-xl flex-1 flex-col justify-center">
           <div className="mb-7 flex items-center justify-between gap-4">
             <Link
               href="/"

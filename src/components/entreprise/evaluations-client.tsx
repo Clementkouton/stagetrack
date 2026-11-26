@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { saveEvaluation } from "@/app/entreprise/actions";
@@ -29,8 +30,18 @@ export interface EvaluableIntern {
   autonomie: number;
   espritEquipe: number;
   appreciation: string;
+  recommandation: "FORTEMENT_RECOMMANDE" | "RECOMMANDE" | "NEUTRE" | "NON_RECOMMANDE";
   finalized: boolean;
 }
+
+export const RECOMMANDATIONS = [
+  { value: "FORTEMENT_RECOMMANDE", label: "Fortement recommandé", cls: "border-emerald-700/30 bg-emerald-700/10 text-emerald-800" },
+  { value: "RECOMMANDE", label: "Recommandé", cls: "border-brand/25 bg-brand-50 text-brand" },
+  { value: "NEUTRE", label: "Neutre", cls: "border-slate-300 bg-slate-100 text-slate-600" },
+  { value: "NON_RECOMMANDE", label: "Non recommandé", cls: "border-red-300 bg-red-50 text-red-700" },
+] as const;
+
+export type Recommandation = (typeof RECOMMANDATIONS)[number]["value"];
 
 const CRITERIA = [
   { key: "technique", label: "Compétences techniques" },
@@ -81,6 +92,7 @@ function EvaluationCard({ intern }: { intern: EvaluableIntern }) {
     espritEquipe: intern.espritEquipe,
   });
   const [appreciation, setAppreciation] = useState(intern.appreciation);
+  const [recommandation, setRecommandation] = useState<Recommandation>(intern.recommandation);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiNote, setAiNote] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -132,6 +144,7 @@ function EvaluationCard({ intern }: { intern: EvaluableIntern }) {
         autonomie: ratings.autonomie,
         espritEquipe: ratings.espritEquipe,
         appreciation,
+        recommandation,
         finalized,
       });
       if (result.ok) {
@@ -245,6 +258,36 @@ function EvaluationCard({ intern }: { intern: EvaluableIntern }) {
             </Button>
           </div>
           {aiNote ? <p className="mt-2 text-[11px] text-gold-dark">{aiNote}</p> : null}
+        </div>
+
+        {/* Recommandation d'embauche */}
+        <div className="mt-4 rounded-xl border border-slate-200/80 bg-slate-50 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wide text-slate-400">Recommandation d&apos;embauche</p>
+              <p className="mt-0.5 text-[11px] text-body">
+                Avis final transmis à l&apos;établissement et à l&apos;étudiant (visible dans le dossier de stage).
+              </p>
+            </div>
+            <Badge variant="outline" className={cn("text-[10px] font-bold", RECOMMANDATIONS.find((r) => r.value === recommandation)?.cls)}>
+              {RECOMMANDATIONS.find((r) => r.value === recommandation)?.label}
+            </Badge>
+          </div>
+          <Select
+            value={recommandation}
+            onValueChange={(v) => setRecommandation(v as Recommandation)}
+          >
+            <SelectTrigger className="mt-2 h-9 rounded-xl bg-white text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {RECOMMANDATIONS.map((r) => (
+                <SelectItem key={r.value} value={r.value} className="text-xs">
+                  {r.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       </CardContent>
     </Card>

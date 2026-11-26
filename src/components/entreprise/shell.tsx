@@ -5,10 +5,12 @@
  */
 import { useState, type ComponentType } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   IconArrowUpRight,
   IconBriefcase,
+  IconShieldCheck,
+  IconUserStar,
   IconCalendarCheck,
   IconClipboardList,
   IconFiles,
@@ -17,6 +19,7 @@ import {
   IconRobotFace,
   IconSettings,
   IconSparkles,
+  IconLogout,
   IconUsersGroup,
   IconWorld,
 } from "@tabler/icons-react";
@@ -44,28 +47,44 @@ import { cn } from "@/lib/utils";
 interface NavItem {
   href: string;
   label: string;
+  /** Libellé spécifique pour le Tuteur / Maître de Stage. */
+  tutorLabel?: string;
   icon: ComponentType<{ size?: number | string; className?: string; stroke?: number }>;
+  /** Masqué au Tuteur / Maître de Stage (réservé à l'Admin RH). */
+  adminOnly?: boolean;
+  /** Masqué à l'Admin RH (espace tuteur). */
+  tutorOnly?: boolean;
 }
 
 const NAV_MAIN: NavItem[] = [
   { href: "/entreprise/dashboard", label: "Tableau de bord", icon: IconLayoutDashboard },
-  { href: "/entreprise/offres", label: "Offres de stage", icon: IconBriefcase },
-  { href: "/entreprise/candidatures", label: "Candidatures", icon: IconClipboardList },
-  { href: "/entreprise/stagiaires", label: "Mes stagiaires", icon: IconUsersGroup },
+  { href: "/entreprise/offres", label: "Offres de stage", icon: IconBriefcase, adminOnly: true },
+  { href: "/entreprise/candidatures", label: "Candidatures", icon: IconClipboardList, adminOnly: true },
+  { href: "/entreprise/stagiaires", label: "Mes stagiaires", tutorLabel: "Mes stagiaires", icon: IconUsersGroup },
   { href: "/entreprise/suivi", label: "Missions & Présences", icon: IconCalendarCheck },
 ];
 
 const NAV_SECONDARY: NavItem[] = [
-  { href: "/entreprise/documents", label: "Documents & Conventions", icon: IconFiles },
+  { href: "/entreprise/documents", label: "Documents & Conventions", icon: IconFiles, adminOnly: true },
   { href: "/entreprise/evaluations", label: "Évaluations", icon: IconReportAnalytics },
-  { href: "/entreprise/parametres", label: "Paramètres & Équipe", icon: IconSettings },
+  { href: "/entreprise/parametres", label: "Paramètres & Équipe", tutorLabel: "Mon Profil", icon: IconSettings },
 ];
 
-export function EntrepriseShell({ children }: { children: React.ReactNode }) {
+export interface EntrepriseShellProps {
+  isAdmin: boolean;
+  memberName: string;
+  memberPosition: string;
+  companyName: string;
+}
+
+export function EntrepriseShell({ isAdmin, memberName, memberPosition, companyName, children }: EntrepriseShellProps & { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [aiOpen, setAiOpen] = useState(false);
 
   const isActive = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
+
+  const visible = (items: NavItem[]) => items.filter((item) => (isAdmin ? !item.tutorOnly : !item.adminOnly));
 
   const renderMenu = (items: NavItem[]) => (
     <SidebarMenu>
@@ -82,7 +101,7 @@ export function EntrepriseShell({ children }: { children: React.ReactNode }) {
               )}
             >
               <item.icon size={18} className="shrink-0" />
-              <span>{item.label}</span>
+              <span>{!isAdmin && item.tutorLabel ? item.tutorLabel : item.label}</span>
             </Link>
           </SidebarMenuButton>
         </SidebarMenuItem>
@@ -112,7 +131,7 @@ export function EntrepriseShell({ children }: { children: React.ReactNode }) {
               <span className="inline-flex w-fit rounded-md bg-white px-2 py-1">
                 <img src="/logo-full.png" alt="StageTrack" className="h-4 w-auto" />
               </span>
-              <span className="mt-1 text-[11px] font-medium text-white/60">Espace entreprise</span>
+              <span className="mt-1 text-[11px] font-medium text-white/60">Espace {companyName}</span>
             </span>
           </Link>
         </SidebarHeader>
@@ -120,15 +139,15 @@ export function EntrepriseShell({ children }: { children: React.ReactNode }) {
         <SidebarContent className="gap-0 px-2 py-3">
           <SidebarGroup className="p-0">
             <SidebarGroupLabel className="text-[10px] font-bold uppercase tracking-widest text-white/40">
-              Pilotage
+              {isAdmin ? "Pilotage" : "Espace tuteur"}
             </SidebarGroupLabel>
-            <SidebarGroupContent>{renderMenu(NAV_MAIN)}</SidebarGroupContent>
+            <SidebarGroupContent>{renderMenu(visible(NAV_MAIN))}</SidebarGroupContent>
           </SidebarGroup>
           <SidebarGroup className="mt-4 p-0">
             <SidebarGroupLabel className="text-[10px] font-bold uppercase tracking-widest text-white/40">
-              Ressources humaines
+              {isAdmin ? "Ressources humaines" : "Suivi & évaluation"}
             </SidebarGroupLabel>
-            <SidebarGroupContent>{renderMenu(NAV_SECONDARY)}</SidebarGroupContent>
+            <SidebarGroupContent>{renderMenu(visible(NAV_SECONDARY))}</SidebarGroupContent>
           </SidebarGroup>
         </SidebarContent>
 
@@ -147,9 +166,18 @@ export function EntrepriseShell({ children }: { children: React.ReactNode }) {
             </span>
             <IconSparkles size={15} className="shrink-0 text-gold transition-transform group-hover:scale-110" />
           </button>
+          <div className={cn("flex items-center gap-3 rounded-xl px-2 py-1.5")}>
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gold/20 text-[11px] font-bold text-gold">
+              {memberName.split(" ").map((p) => p[0]).slice(0, 2).join("")}
+            </span>
+            <span className="min-w-0 flex-col">
+              <span className="block truncate text-sm font-semibold text-white">{memberName}</span>
+              <span className="block truncate text-[11px] text-white/60">{memberPosition} · {companyName}</span>
+            </span>
+          </div>
           <Link
             href="/"
-            className="mt-2 flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium text-white/60 transition-colors hover:bg-white/10 hover:text-white"
+            className="mt-1 flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium text-white/60 transition-colors hover:bg-white/10 hover:text-white"
           >
             <IconWorld size={15} />
             Voir le site public
@@ -164,13 +192,38 @@ export function EntrepriseShell({ children }: { children: React.ReactNode }) {
           <span className="hidden lg:inline-flex lg:h-9 lg:w-9" aria-hidden />
           <div className="flex min-w-0 flex-1 items-center gap-2">
             <img src="/logo-full.png" alt="StageTrack" className="h-4 w-auto shrink-0 lg:hidden" />
-            <Badge variant="outline" className="hidden shrink-0 border-brand/20 bg-brand-50 text-[11px] text-brand sm:inline-flex">
-              KKiaPay — Portail entreprise
-            </Badge>
-            <Badge variant="outline" className="inline-flex shrink-0 border-brand/20 bg-brand-50 text-[11px] text-brand sm:hidden">
-              KKiaPay
-            </Badge>
+            {isAdmin ? (
+              <Badge variant="outline" className="hidden shrink-0 border-brand/20 bg-brand-50 text-[11px] font-bold text-brand sm:inline-flex">
+                <IconShieldCheck size={12} className="mr-1" />
+                Administrateur RH — {companyName}
+              </Badge>
+            ) : (
+              <Badge className="shrink-0 gap-1.5 rounded-lg bg-gold px-2.5 py-1 text-[11px] font-bold text-white hover:bg-gold-dark">
+                <IconUserStar size={13} />
+                <span className="hidden sm:inline">Tuteur / Maître de Stage</span>
+                <span className="sm:hidden">Tuteur</span>
+              </Badge>
+            )}
           </div>
+          {/* Déconnexion — session réelle */}
+          <Button
+            type="button"
+            onClick={() => {
+              void (async () => {
+                try {
+                  await fetch("/api/auth/logout", { method: "POST" });
+                } finally {
+                  router.push("/auth");
+                  router.refresh();
+                }
+              })();
+            }}
+            variant="outline"
+            className="h-9 shrink-0 gap-1.5 rounded-xl border-slate-200/80 bg-white px-2.5 text-xs font-semibold text-slate-600 hover:bg-red-50 hover:text-red-600"
+          >
+            <IconLogout size={15} />
+            <span className="hidden md:inline">Déconnexion</span>
+          </Button>
           <Button
             type="button"
             onClick={() => setAiOpen(true)}

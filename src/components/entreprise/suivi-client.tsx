@@ -31,7 +31,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { createTask, deleteTask, saveAiTasks, updateTaskStatus, validatePresenceSheet } from "@/app/entreprise/actions";
+import { addJournalFeedback, createTask, deleteTask, saveAiTasks, updateTaskStatus, validatePresenceSheet } from "@/app/entreprise/actions";
+import type { TaskStatus } from "@/app/entreprise/actions";
 import { formatDateFr, formatDateShortFr } from "@/lib/entreprise-format";
 import { cn } from "@/lib/utils";
 
@@ -68,17 +69,22 @@ export interface PresenceRow {
 
 export interface JournalRow {
   id: string;
+  internId: string;
   internName: string;
   position: string;
   week: number;
   content: string;
+  tutorFeedback: string | null;
 }
 
-const TASK_STATUS: Record<string, { label: string; cls: string }> = {
-  A_FAIRE: { label: "À faire", cls: "border-slate-300 bg-slate-100 text-slate-600" },
-  EN_COURS: { label: "En cours", cls: "border-brand/25 bg-brand-50 text-brand" },
-  VALIDE: { label: "Validé", cls: "border-emerald-700/30 bg-emerald-700/10 text-emerald-800" },
+const TASK_STATUS: Record<TaskStatus, { label: string; cls: string }> = {
+  TODO: { label: "À faire", cls: "border-slate-300 bg-slate-100 text-slate-600" },
+  IN_PROGRESS: { label: "En cours", cls: "border-brand/25 bg-brand-50 text-brand" },
+  IN_REVIEW: { label: "En revue", cls: "border-gold/40 bg-gold-50 text-gold-dark" },
+  DONE: { label: "Terminé", cls: "border-emerald-700/30 bg-emerald-700/10 text-emerald-800" },
 };
+
+const TASK_FLOW: TaskStatus[] = ["TODO", "IN_PROGRESS", "IN_REVIEW", "DONE"];
 
 export function SuiviClient({
   interns,
@@ -241,19 +247,21 @@ export function SuiviClient({
                           </div>
                           <div className="flex shrink-0 items-center gap-2">
                             <Select
-                              value={task.status}
+                              value={TASK_FLOW.includes(task.status as TaskStatus) ? task.status : "TODO"}
                               onValueChange={(v) => {
                                 startTransition(async () => {
-                                  const result = await updateTaskStatus(task.id, v as "A_FAIRE" | "EN_COURS" | "VALIDE");
+                                  const result = await updateTaskStatus(task.id, v as TaskStatus);
                                   if (!result.ok) toast({ title: "Erreur", description: result.error, variant: "destructive" });
                                 });
                               }}
                             >
-                              <SelectTrigger className="h-8 w-[130px] text-xs"><SelectValue /></SelectTrigger>
+                              <SelectTrigger className="h-8 w-[150px] text-xs"><SelectValue /></SelectTrigger>
                               <SelectContent>
-                                <SelectItem value="A_FAIRE" className="text-xs">À faire</SelectItem>
-                                <SelectItem value="EN_COURS" className="text-xs">En cours</SelectItem>
-                                <SelectItem value="VALIDE" className="text-xs">Validé</SelectItem>
+                                {TASK_FLOW.map((s) => (
+                                  <SelectItem key={s} value={s} className="text-xs">
+                                    {TASK_STATUS[s].label}
+                                  </SelectItem>
+                                ))}
                               </SelectContent>
                             </Select>
                             <Button
@@ -391,22 +399,7 @@ export function SuiviClient({
             </Card>
           ) : (
             journals.map((j) => (
-              <Card key={j.id} className="border-slate-200/80 rounded-xl bg-white">
-                <CardContent className="p-5">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="font-bold text-ink">{j.internName}</p>
-                      <p className="text-xs text-body">{j.position}</p>
-                    </div>
-                    <Badge variant="outline" className="shrink-0 border-brand/25 bg-brand-50 text-[10px] font-bold text-brand">
-                      Semaine {j.week}
-                    </Badge>
-                  </div>
-                  <p className="mt-3 whitespace-pre-line rounded-xl bg-slate-50 p-4 text-sm leading-relaxed text-body">
-                    {j.content}
-                  </p>
-                </CardContent>
-              </Card>
+              <JournalCard key={j.id} journal={j} />
             ))
           )}
         </TabsContent>
@@ -418,6 +411,109 @@ export function SuiviClient({
         onClose={() => setTaskDialogIntern(null)}
       />
     </div>
+  );
+}
+
+/** Journal hebdomadaire avec retour du tuteur (lecture + rédaction). */
+function JournalCard({ journal }: { journal: JournalRow }) {
+  const { toast } = useToast();
+  const [feedback, setFeedback] = useState(journal.tutorFeedback ?? "");
+  const [editing, setEditing] = useState(false);
+  const [pending, startTransition] = useTransition();
+
+  const save = () => {
+    startTransition(async () => {
+      const result = await addJournalFeedback(journal.id, feedback);
+      if (result.ok) {
+        toast({ title: "Retour enregistré", description: `Votre retour sur le journal de ${journal.internName} a été transmis.` });
+        setEditing(false);
+      } else {
+        toast({ title: "Erreur", description: result.error, variant: "destructive" });
+      }
+    });
+  };
+
+  return (
+    <Card className="border-slate-200/80 rounded-xl bg-white">
+      <CardContent className="p-5">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="font-bold text-ink">{journal.internName}</p>
+            <p className="text-xs text-body">{journal.position}</p>
+          </div>
+          <Badge variant="outline" className="shrink-0 border-brand/25 bg-brand-50 text-[10px] font-bold text-brand">
+            Semaine {journal.week}
+          </Badge>
+        </div>
+        <p className="mt-3 whitespace-pre-line rounded-xl bg-slate-50 p-4 text-sm leading-relaxed text-body">
+          {journal.content}
+        </p>
+
+        <div className="mt-3 rounded-xl border border-gold/25 bg-gold/5 p-3.5">
+          <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wide text-gold-dark">
+            <IconNotebook size={13} />
+            Retour du tuteur
+          </p>
+          {editing ? (
+            <div className="mt-2 space-y-2">
+              <Textarea
+                value={feedback}
+                onChange={(e) => setFeedback(e.target.value)}
+                rows={3}
+                placeholder="Encouragez, corrigez ou orientez le stagiaire pour la semaine suivante…"
+                className="bg-white text-sm"
+              />
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  onClick={save}
+                  disabled={pending || feedback.trim().length < 5}
+                  className="h-8 gap-1.5 rounded-lg bg-brand text-xs hover:bg-brand-dark"
+                >
+                  {pending ? <IconLoader2 size={13} className="animate-spin" /> : <IconCheck size={13} />}
+                  Enregistrer le retour
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    setFeedback(journal.tutorFeedback ?? "");
+                    setEditing(false);
+                  }}
+                  className="h-8 rounded-lg text-xs"
+                >
+                  Annuler
+                </Button>
+              </div>
+            </div>
+          ) : journal.tutorFeedback ? (
+            <p className="mt-1.5 whitespace-pre-line text-[13px] leading-relaxed text-body">{journal.tutorFeedback}</p>
+          ) : (
+            <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+              <p className="text-xs text-body">Aucun retour pour le moment — le stagiaire attend votre avis.</p>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setEditing(true)}
+                className="h-8 gap-1.5 rounded-lg border-gold/40 bg-white text-xs font-semibold text-gold-dark hover:bg-gold/10"
+              >
+                <IconNotebook size={13} />
+                Écrire un retour
+              </Button>
+            </div>
+          )}
+          {journal.tutorFeedback && !editing ? (
+            <button
+              type="button"
+              onClick={() => setEditing(true)}
+              className="mt-2 text-[11px] font-semibold text-brand hover:underline"
+            >
+              Modifier le retour
+            </button>
+          ) : null}
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
